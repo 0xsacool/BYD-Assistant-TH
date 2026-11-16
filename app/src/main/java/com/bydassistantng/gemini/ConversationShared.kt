@@ -412,7 +412,11 @@ fun voiceAssistantSystemPrompt(
     val weatherInstruction = if (weather) {
         " For outdoor weather, today’s temperature, rain or outdoor PM2.5, use online_weather before replying, " +
             "even if Google Search is unavailable. Prefer online_weather to search for weather. Use only the explicitly named place; " +
-            "if no place was named omit the city, and if the tool needs a place, ask for one. Distinguish online outdoor estimates " +
+            "if no place was named omit the city. Do not announce a location failure or speak before the tool returns. " +
+            "When needs_city is true, ask one short question in the user's language (Thai: ตอนนี้ต้องการดูอากาศที่เมืองไหนครับ?). " +
+            "If last_named_city is present, offer it as a previously requested city, never as the current location. Wait for the answer; do not repeat the lookup without a city. " +
+            "When the user gives a city in response, immediately call online_weather with that city and the original weather request. " +
+            "Set include_pm25 true only for air quality or PM2.5 requests. Distinguish online outdoor estimates " +
             "from temperature or air-quality readings inside the vehicle or from the car’s own sensors. Never invent missing values. " +
             "Mention Open-Meteo and that PM2.5 is a model estimate when relevant."
     } else ""

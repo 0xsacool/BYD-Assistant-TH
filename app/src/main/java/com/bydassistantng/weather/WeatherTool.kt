@@ -3,19 +3,27 @@ package com.bydassistantng.weather
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Location
 import android.location.LocationManager
+import android.os.CancellationSignal
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import com.bydassistantng.gemini.GeminiFunctionCall
 import com.bydassistantng.gemini.GeminiFunctionDeclaration
 import com.bydassistantng.gemini.GeminiSchema
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.*
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.resume
 import kotlin.math.round
 
 object WeatherTool {
@@ -25,10 +33,11 @@ object WeatherTool {
         description = "Only when the user requests online weather, current outdoor air temperature, today's forecast or outdoor PM2.5, get Open-Meteo estimates. Supply the explicitly named city, including region or country when given; omit city for weather at the device's approximate location. For cabin temperature, or specifically the car's sensors, use read_car instead. Cite the source, place and freshness; never guess missing data.",
         parameters = GeminiSchema(type = "OBJECT", properties = mapOf(
             "city" to GeminiSchema(type = "STRING", description = "Named city or province; if specified include region/country separated by commas. Omit when not specified."),
+            "include_pm25" to GeminiSchema(type = "BOOLEAN", description = "True only if the user asks about PM2.5 or outdoor air quality."),
         )),
     )
     private val client by lazy {
-        OkHttpClient.Builder().callTimeout(8, TimeUnit.SECONDS)
+        OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS)
             .followRedirects(false).followSslRedirects(false).build()
     }
     private val aliases = mapOf(
@@ -47,24 +56,75 @@ object WeatherTool {
         if (!it.isSuccessful) error("Weather service unavailable")
         Json.parseToJsonElement(it.body?.string() ?: error("Empty response")).jsonObject
     }
-    private fun approximateLocation(context: Context): Pair<Double, Double>? {
+    private const val MAX_LOCATION_AGE_MS = 60_000L
+    private const val LOCATION_TIMEOUT_MS = 4_000L
+
+    internal fun isFreshLocation(now: Long, fix: Long): Boolean = now - fix in 0L..MAX_LOCATION_AGE_MS
+
+    // A single bounded request, only when the user asks for weather and has opted in.
+    // No background permission, persistent coordinates or continuous tracking.
+    private suspend fun approximateLocation(context: Context): Pair<Double, Double>? {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null
         return try {
             val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val location = manager.getProviders(true).mapNotNull { provider ->
-                try { manager.getLastKnownLocation(provider) } catch (_: SecurityException) { null }
-            }.filter { System.currentTimeMillis() - it.time in 0L..1_800_000L }.maxByOrNull { it.time } ?: return null
-            location.latitude to location.longitude
-        } catch (_: Exception) { null }
+            val providers = manager.getProviders(true).filter { it != LocationManager.PASSIVE_PROVIDER }
+            val cached = providers.mapNotNull { provider ->
+                try { manager.getLastKnownLocation(provider) } catch (_: Exception) { null }
+            }.filter { isFreshLocation(System.currentTimeMillis(), it.time) }.maxByOrNull { it.time }
+            val location = cached ?: withTimeoutOrNull(LOCATION_TIMEOUT_MS) { currentLocation(context, manager, providers) }
+            location?.let { it.latitude to it.longitude }
+        } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
     }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private suspend fun currentLocation(context: Context, manager: LocationManager, providers: List<String>): Location? =
+        suspendCancellableCoroutine { continuation ->
+            if (providers.isEmpty() || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                continuation.resume(null)
+                return@suspendCancellableCoroutine
+            }
+            val signals = providers.map { CancellationSignal() }
+            val remaining = AtomicInteger(providers.size)
+            val completed = AtomicBoolean(false)
+            continuation.invokeOnCancellation { signals.forEach { it.cancel() } }
+            fun finish(location: Location?) {
+                val valid = location?.takeIf { isFreshLocation(System.currentTimeMillis(), it.time) }
+                if ((valid != null || remaining.decrementAndGet() == 0) && completed.compareAndSet(false, true)) {
+                    signals.forEach { it.cancel() }
+                    if (continuation.isActive) continuation.resume(valid)
+                }
+            }
+            providers.forEachIndexed { index, provider ->
+                if (!completed.get() && continuation.isActive) {
+                    try {
+                        LocationManagerCompat.getCurrentLocation(manager, provider, signals[index], ContextCompat.getMainExecutor(context)) { location ->
+                            finish(location)
+                        }
+                    } catch (_: Exception) { finish(null) }
+                }
+            }
+        }
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeUnless { it is JsonNull }?.contentOrNull
     private fun JsonObject.number(key: String): Double? = (this[key] as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() }
 
-    suspend fun handle(context: Context, call: GeminiFunctionCall, enabled: Boolean, locationEnabled: Boolean): JsonObject =
-        execute(call, enabled, locationEnabled, { approximateLocation(context) }, ::get)
+    suspend fun handle(context: Context, call: GeminiFunctionCall, enabled: Boolean, locationEnabled: Boolean): JsonObject {
+        val result = execute(call, enabled, locationEnabled, { approximateLocation(context) }, ::get)
+        if (!enabled) return result
+        // Save only a successfully resolved explicitly requested city, never device coordinates.
+        val prefs = context.getSharedPreferences("weather_city", Context.MODE_PRIVATE)
+        val city = (call.args["city"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim().orEmpty()
+        if (city.isNotEmpty() && result["error"] == null) {
+            result.string("location")?.let { prefs.edit().putString("last_city", it).apply() }
+        }
+        if ((result["needs_city"] as? JsonPrimitive)?.booleanOrNull == true) {
+            val last = prefs.getString("last_city", null)
+            if (!last.isNullOrBlank()) return JsonObject(result + ("last_named_city" to JsonPrimitive(last)))
+        }
+        return result
+    }
 
     internal suspend fun execute(call: GeminiFunctionCall, enabled: Boolean, locationEnabled: Boolean,
-        location: () -> Pair<Double, Double>?, fetch: (String) -> JsonObject): JsonObject = withContext(Dispatchers.IO) {
+        location: suspend () -> Pair<Double, Double>?, fetch: (String) -> JsonObject): JsonObject = withContext(Dispatchers.IO) {
         if (!enabled) return@withContext errorAnswer("Online weather is disabled in Settings.")
         val rawCity = call.args["city"]
         if (rawCity != null && (rawCity !is JsonPrimitive || !rawCity.isString)) return@withContext errorAnswer("Please specify a city name.")
@@ -98,7 +158,10 @@ object WeatherTool {
                 place = listOfNotNull(result.string("name"), result.string("admin1"), result.string("country")).distinct().joinToString(", ")
             } else {
                 val approximate = (if (locationEnabled) location() else null)
-                    ?: return@withContext errorAnswer("No recent permitted approximate location is available. Ask the user for a city.")
+                    ?: return@withContext buildJsonObject {
+                        put("error", "Current approximate location is unavailable")
+                        put("needs_city", true)
+                    }
                 coordinates = round(approximate.first * 10) / 10 to round(approximate.second * 10) / 10
                 place = "Approximate device location"
             }
@@ -106,8 +169,9 @@ object WeatherTool {
                 return@withContext errorAnswer("Location unavailable. Ask the user for a city.")
             val common = mapOf("latitude" to coordinates.first.toString(), "longitude" to coordinates.second.toString(), "timezone" to "auto")
             val forecast = fetch(url("https://api.open-meteo.com/v1/forecast", common + mapOf("current" to "temperature_2m,weather_code", "daily" to "temperature_2m_max,temperature_2m_min,precipitation_probability_max", "forecast_days" to "1")))
-            val air = try { fetch(url("https://air-quality-api.open-meteo.com/v1/air-quality", common + mapOf("current" to "pm2_5"))) } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
-            report(place, forecast, air)
+            val includePm25 = (call.args["include_pm25"] as? JsonPrimitive)?.booleanOrNull == true
+            val air = if (includePm25) try { fetch(url("https://air-quality-api.open-meteo.com/v1/air-quality", common + mapOf("current" to "pm2_5"))) } catch (e: CancellationException) { throw e } catch (_: Exception) { null } else null
+            report(place, forecast, air, includePm25)
         } catch (e: CancellationException) { throw e } catch (_: Exception) {
             errorAnswer("Online weather is unavailable. Please try again or provide another city.")
         }
@@ -126,7 +190,7 @@ object WeatherTool {
         else -> "Unknown condition"
     }
     internal fun errorAnswer(message: String) = buildJsonObject { put("error", message) }
-    internal fun report(place: String, forecast: JsonObject, air: JsonObject?): JsonObject {
+    internal fun report(place: String, forecast: JsonObject, air: JsonObject?, includePm25: Boolean = true): JsonObject {
         val current = forecast["current"]?.jsonObject ?: error("Missing current forecast")
         val daily = forecast["daily"]?.jsonObject ?: error("Missing daily forecast")
         val aq = air?.get("current") as? JsonObject
@@ -149,7 +213,7 @@ object WeatherTool {
                 put("pm2_5_ug_m3", pm)
                 put("pm2_5_time", aq.string("time"))
                 put("pm2_5_note", "Outdoor model estimate, not a measurement or cabin reading; CAMS via Open-Meteo")
-            } else put("pm2_5_note", "Outdoor model estimate unavailable")
+            } else if (includePm25) put("pm2_5_note", "Outdoor model estimate unavailable")
         }
     }
 }

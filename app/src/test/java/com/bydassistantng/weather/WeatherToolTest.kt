@@ -14,8 +14,11 @@ import org.junit.Test
 
 class WeatherToolTest {
     private fun parse(s: String) = Json.parseToJsonElement(s).jsonObject
-    private fun call(city: String? = null) = GeminiFunctionCall(name = WeatherTool.FUNCTION_NAME,
-        args = JsonObject(if (city == null) emptyMap() else mapOf("city" to JsonPrimitive(city))))
+    private fun call(city: String? = null, pm25: Boolean = false) = GeminiFunctionCall(name = WeatherTool.FUNCTION_NAME,
+        args = JsonObject(buildMap {
+            if (city != null) put("city", JsonPrimitive(city))
+            if (pm25) put("include_pm25", JsonPrimitive(true))
+        }))
     private val forecast = parse("""{"timezone":"Asia/Bangkok","current":{"time":"2026-01-01T12:00","temperature_2m":30,"weather_code":3},"daily":{"time":["2026-01-01"],"temperature_2m_max":[33],"temperature_2m_min":[25],"precipitation_probability_max":[40]}}""")
     private val air = parse("""{"current":{"time":"2026-01-01T12:00","pm2_5":18}}""")
 
@@ -36,7 +39,7 @@ class WeatherToolTest {
     }
     @Test fun namedThaiCityWinsAndReportsForecastAndEstimate() = runBlocking {
         val urls = mutableListOf<String>()
-        val result = WeatherTool.execute(call("กรุงเทพ"), true, true, { fail("location should not be read"); null }) { url ->
+        val result = WeatherTool.execute(call("กรุงเทพ", pm25 = true), true, true, { fail("location should not be read"); null }) { url ->
             urls += url
             when {
                 url.contains("geocoding-api") -> parse("""{"results":[{"name":"Bangkok","country":"Thailand","latitude":13.7,"longitude":100.5}]}""")
@@ -53,7 +56,7 @@ class WeatherToolTest {
     }
     @Test fun locationFallbackAndAirFailureAreExplicit() = runBlocking {
         val urls = mutableListOf<String>()
-        val result = WeatherTool.execute(call(), true, true, { 13.7 to 100.5 }) { url ->
+        val result = WeatherTool.execute(call(pm25 = true), true, true, { 13.7 to 100.5 }) { url ->
             urls += url
             if (url.contains("air-quality-api")) throw IllegalStateException() else forecast
         }
@@ -87,6 +90,25 @@ class WeatherToolTest {
         assertTrue(urls.single().contains("latitude=13.8"))
         assertTrue(urls.single().contains("longitude=100.6"))
         assertFalse(urls.single().contains("13.76543"))
+    }
+    @Test fun currentLocationFreshnessRejectsOldOrFutureFix() {
+        assertTrue(WeatherTool.isFreshLocation(100_000L, 40_000L))
+        assertFalse(WeatherTool.isFreshLocation(100_001L, 40_000L))
+        assertFalse(WeatherTool.isFreshLocation(100_000L, 100_001L))
+    }
+    @Test fun missingCurrentLocationAsksOneQuestionWithoutNetwork() = runBlocking {
+        val result = WeatherTool.execute(call(), true, true, { null }) { fail("Unexpected network request"); forecast }
+        assertEquals("true", result.getValue("needs_city").jsonPrimitive.content)
+    }
+    @Test fun temperatureOnlyDoesNotRequestAirQuality() = runBlocking {
+        val urls = mutableListOf<String>()
+        val result = WeatherTool.execute(call(), true, true, { 13.7 to 100.5 }) { url ->
+            urls += url
+            forecast
+        }
+        assertEquals(1, urls.size)
+        assertTrue(urls.single().contains("api.open-meteo.com/v1/forecast"))
+        assertFalse(result.containsKey("pm2_5_note"))
     }
     @Test fun preservesCancellation() = runBlocking {
         try {
