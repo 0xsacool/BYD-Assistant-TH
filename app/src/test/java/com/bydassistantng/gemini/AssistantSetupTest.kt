@@ -153,7 +153,7 @@ class AssistantSetupTest {
 
     @Test
     fun aFixedReplyLanguageIsSaidAsAFirmRuleAtTheStartAndAgainAtTheEnd() {
-        for ((language, name) in listOf(AssistantLanguage.ARABIC to "Arabic", AssistantLanguage.ENGLISH to "English", AssistantLanguage.RUSSIAN to "Russian", AssistantLanguage.POLISH to "Polish", AssistantLanguage.INDONESIAN to "Indonesian")) {
+        for ((language, name) in listOf(AssistantLanguage.ARABIC to "Arabic", AssistantLanguage.ENGLISH to "English", AssistantLanguage.RUSSIAN to "Russian", AssistantLanguage.POLISH to "Polish", AssistantLanguage.INDONESIAN to "Indonesian", AssistantLanguage.THAI to "Thai")) {
             val prompt = voiceAssistantSystemPrompt(language, conversation = true)
             assertTrue(prompt.contains("Always reply in $name."))
             assertTrue(prompt.endsWith("ask the user in $name to say it again."))
@@ -196,6 +196,15 @@ class AssistantSetupTest {
     }
 
     @Test
+    fun aThaiReplyMustContainThaiLetters() {
+        assertEquals(true, ReplyLanguage.matches(AssistantLanguage.THAI, "เปิดหน้าต่างแล้ว"))
+        assertEquals(false, ReplyLanguage.matches(AssistantLanguage.THAI, "The window is open."))
+        assertEquals(false, ReplyLanguage.matches(AssistantLanguage.POLISH, "เปิดหน้าต่างแล้ว"))
+        assertEquals(false, ReplyLanguage.matches(AssistantLanguage.INDONESIAN, "เปิดหน้าต่างแล้ว"))
+        assertNull(ReplyLanguage.matches(AssistantLanguage.THAI, "..."))
+    }
+
+    @Test
     fun indonesianIsAskedToSoundNaturalOnlyWhenTheAssistantMaySpeakIt() {
         for (language in listOf(AssistantLanguage.AUTO, AssistantLanguage.INDONESIAN)) {
             val prompt = voiceAssistantSystemPrompt(language)
@@ -221,8 +230,8 @@ class AssistantSetupTest {
     @Test
     fun theAutomaticLanguageNamesRussianAmongTheOnesItFollows() {
         val auto = voiceAssistantSystemPrompt(AssistantLanguage.AUTO)
-        assertTrue(auto, auto.contains("English, Arabic, Russian, Polish or Indonesian"))
-        assertTrue(auto, auto.contains("speaks Arabic (in any dialect), Russian, Polish, Indonesian and English"))
+        assertTrue(auto, auto.contains("English, Arabic, Russian, Polish, Indonesian or Thai"))
+        assertTrue(auto, auto.contains("speaks Arabic (in any dialect), Russian, Polish, Indonesian, Thai and English"))
     }
 
     @Test

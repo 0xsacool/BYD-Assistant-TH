@@ -473,4 +473,6 @@
     <string name="log_hide_private">Скрыть личные данные</string>
     <string name="log_hide_private_on">Сказанное и запрошенное вами, места, названия песен, ключи, адреса почты, номера телефонов и сетевые адреса заменяются здесь, в том, чем вы делитесь, и в том, что сохраняете.</string>
     <string name="log_hide_private_off">Показан весь журнал. В нём есть то, что вы говорили и о чём просили. Делитесь им только с теми, кому доверяете.</string>
+    <string name="app_language_thai">ไทย</string>
+    <string name="language_thai">Тайский</string>
 </resources>

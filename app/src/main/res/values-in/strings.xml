@@ -477,4 +477,6 @@
     <string name="log_hide_private">Sembunyikan info pribadi</string>
     <string name="log_hide_private_on">Apa yang Anda ucapkan dan minta, tempat, judul lagu, kunci, alamat e-mail, nomor telepon, dan alamat jaringan disamarkan di sini, dalam yang Anda bagikan, dan dalam yang Anda simpan.</string>
     <string name="log_hide_private_off">Seluruh log ditampilkan. Termasuk apa yang Anda ucapkan dan minta. Bagikan hanya kepada orang yang Anda percayai.</string>
+    <string name="app_language_thai">ไทย</string>
+    <string name="language_thai">Bahasa Thailand</string>
 </resources>

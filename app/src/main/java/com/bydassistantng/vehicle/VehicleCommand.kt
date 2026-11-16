@@ -24,6 +24,7 @@ data class VehicleCommand(
     val labelRu: String? = null,
     val labelPl: String? = null,
     val labelId: String? = null,
+    val labelTh: String? = null,
     val invocation: VehicleInvocation,
     val parameter: VehicleParameter,
     /** For [VehicleInvocation.GenericFeatureSet]: the *state* id that reports what [featureId] (a
@@ -94,6 +95,7 @@ fun VehicleCommand.labelFor(languageTag: String): String = when (languageTag) {
     "pl" -> labelPl
     // Android reports Indonesian as "in" (its legacy code); "id" is the current one.
     "id", "in" -> labelId
+    "th" -> labelTh
     else -> label
 } ?: displayName
 

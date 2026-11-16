@@ -6,6 +6,8 @@ import android.content.ContextWrapper
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -39,7 +41,7 @@ fun AppLanguageSelector(selected: AppLanguageChoice, onSelect: (AppLanguageChoic
     Column {
         Text(stringResource(R.string.app_language_title), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.app_language_hint), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 8.dp)) {
             val options = listOf(
                 AppLanguageChoice.SYSTEM to stringResource(R.string.app_language_system),
                 AppLanguageChoice.ENGLISH to stringResource(R.string.app_language_english),
@@ -47,6 +49,7 @@ fun AppLanguageSelector(selected: AppLanguageChoice, onSelect: (AppLanguageChoic
                 AppLanguageChoice.RUSSIAN to stringResource(R.string.app_language_russian),
                 AppLanguageChoice.POLISH to stringResource(R.string.app_language_polish),
                 AppLanguageChoice.INDONESIAN to stringResource(R.string.app_language_indonesian),
+                AppLanguageChoice.THAI to stringResource(R.string.app_language_thai),
             )
             options.forEachIndexed { index, (value, label) ->
                 SegmentedButton(
@@ -65,7 +68,7 @@ fun AssistantLanguageSelector(selected: AssistantLanguage, onSelect: (AssistantL
     Column {
         Text(stringResource(R.string.assistant_language_title), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.assistant_language_hint), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 8.dp)) {
             val options = AssistantLanguage.entries
             options.forEachIndexed { index, value ->
                 SegmentedButton(
@@ -87,6 +90,7 @@ fun AssistantLanguage.label(): String = stringResource(
         AssistantLanguage.RUSSIAN -> R.string.language_russian
         AssistantLanguage.POLISH -> R.string.language_polish
         AssistantLanguage.INDONESIAN -> R.string.language_indonesian
+        AssistantLanguage.THAI -> R.string.language_thai
     },
 )
 

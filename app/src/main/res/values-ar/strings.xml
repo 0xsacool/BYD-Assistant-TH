@@ -473,4 +473,6 @@
     <string name="log_hide_private">إخفاء المعلومات الخاصة</string>
     <string name="log_hide_private_on">يتم هنا استبدال ما قلته وما طلبته والأماكن وأسماء الأغاني والمفاتيح وعناوين البريد الإلكتروني وأرقام الهاتف وعناوين الشبكة، وكذلك في ما تشاركه وما تحفظه.</string>
     <string name="log_hide_private_off">يُعرض السجل كاملًا، وهو يتضمن ما قلته وما طلبته. شاركه فقط مع من تثق بهم.</string>
+    <string name="app_language_thai">ไทย</string>
+    <string name="language_thai">التايلاندية</string>
 </resources>
