@@ -476,4 +476,8 @@
     <string name="log_hide_private">Hide private info</string>
     <string name="log_hide_private_on">What you said and asked for, places, song names, keys, e-mail addresses, phone numbers and network addresses are replaced here, in what you share and in what you save.</string>
     <string name="log_hide_private_off">The whole log is shown. It includes what you said and asked for. Share it only with people you trust.</string>
+    <string name="weather_title">Online weather</string>
+    <string name="weather_desc">Use Open-Meteo only when asked. The city or approximate coordinates are sent to Open-Meteo. PM2.5 is a model estimate.</string>
+    <string name="weather_location_title">Use approximate location for weather</string>
+    <string name="weather_location_desc">When no city is named, use a recent approximate location only with permission. No background queries.</string>
 </resources>

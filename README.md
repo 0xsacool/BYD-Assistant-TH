@@ -258,3 +258,7 @@ BYD Assistant NG is free software, licensed under the **GNU General Public Licen
 You may use, study, change and share it under those terms; changes you distribute must stay under the same licence.
 It comes with no warranty — see [Safety](#safety).
 It is based on Assistant by @kangrio, which is MIT-licensed; its notice is in [NOTICE.md](NOTICE.md).
+
+### Online weather
+
+Online weather is off by default and is intended for personal, non-commercial use. Enable it in Settings to ask for a named city; the app sends that city to Open-Meteo geocoding and sends the resulting coordinates to its weather and air-quality APIs. An additional opt-in requests Android approximate location permission; when no city is named, a recent available location is rounded before being sent. If it is unavailable, the assistant asks for a city. Queries occur only when requested, never in the background. Weather and outdoor PM2.5 are model estimates, not cabin or vehicle sensor readings; forecasts may be inaccurate or unavailable. Data is provided by [Open-Meteo](https://open-meteo.com/) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); its free API is for non-commercial use and subject to its terms and limits. Commercial use requires an appropriate Open-Meteo plan.

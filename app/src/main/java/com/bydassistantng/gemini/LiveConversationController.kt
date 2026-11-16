@@ -232,6 +232,7 @@ class LiveConversationController @Inject constructor(
     // What the session needs to tell a switch that is off from a feature the car does not have (see [SwitchedOffFeatures]).
     private var clusterPresentForSession = false
     private var clusterSwitchOnForSession = false
+    private var weatherForSession = false
     private var webSearchSwitchOnForSession = false
 
     private enum class Gate { OPEN, SILENT, BLOCKED }
@@ -557,6 +558,7 @@ class LiveConversationController @Inject constructor(
         vehicleControlEnabledForSession = preferencesRepository.vehicleControlEnabled.first()
         dialectForSession = preferencesRepository.arabicDialect.first()
         // Off while a recent session showed the server refusing it (see [searchBlockedUntilMs]).
+        weatherForSession = preferencesRepository.weatherEnabled.first()
         webSearchSwitchOnForSession = preferencesRepository.webSearchEnabled.first()
         webSearchForSession = webSearchSwitchOnForSession && SystemClock.elapsedRealtime() >= searchBlockedUntilMs
         voiceForSession = AssistantVoices.valid(preferencesRepository.assistantVoice.first())
@@ -772,6 +774,7 @@ class LiveConversationController @Inject constructor(
             vehicleControlEnabledForSession,
             conversation = true,
             webSearch = webSearchForSession,
+            weather = weatherForSession,
             exteriorSpeaker = player.canSpeakOutside && exteriorSpeakerForSession,
             soundEffects = if (exteriorSpeakerForSession) player.soundEffects else emptyList(),
             memoryTools = longTermForSession,
@@ -791,6 +794,7 @@ class LiveConversationController @Inject constructor(
                         musicHint = musicHintForSession,
                         switchedOff = switchedOff,
                         notOnThisCar = notOnThisCar,
+                        weather = weatherForSession,
                     ),
                 ),
             ),
@@ -1438,9 +1442,9 @@ class LiveConversationController @Inject constructor(
             }
             is LiveEvent.ToolCall -> {
                 awaitingSpokenReply = true
-                val responses = event.calls.map { call ->
-                    AppLogger.log(TAG, "Tool call: ${call.name}(${call.args})")
-                    if (shortTermForSession && call.name != RememberTool.FUNCTION_NAME && call.name != ForgetMemoryTool.FUNCTION_NAME) {
+                val results = dispatchBatch(event.calls) { call ->
+                    AppLogger.log(TAG, if (call.name == "online_weather") "Tool call: online_weather" else "Tool call: ${call.name}(${call.args})")
+                    if (shortTermForSession && call.name != "online_weather" && call.name != RememberTool.FUNCTION_NAME && call.name != ForgetMemoryTool.FUNCTION_NAME) {
                         val action = RecentExchanges.describeCall(
                             call.name,
                             call.args.mapValues { (_, value) -> (value as? JsonPrimitive)?.content ?: value.toString() },
@@ -1466,13 +1470,16 @@ class LiveConversationController @Inject constructor(
                         VehicleFunctionDispatcher.dispatch(call, vehicleControlEnabledForSession, vehicleController, context, cluster = clusterForSession) { displayName ->
                             report(TurnStatus.DispatchingCommand(displayName))
                         }.also { answer ->
-                            // Music or a video is about to play through the speakers: the microphone would
-                            // only hear it, so the conversation ends once the short confirmation is spoken.
+                            // End after the reply, not during the ordered batch. Do not reopen the
+                            // microphone into music or video playing through the speakers.
                             if (call.name == PlayMediaTool.FUNCTION_NAME && (answer["status"] as? JsonPrimitive)?.content == "ok") {
                                 endAfterReply = true
                             }
                         }
                     }
+                    result
+                }
+                val responses = event.calls.zip(results) { call, result ->
                     LiveFunctionResponse(id = call.id, name = call.name, response = result)
                 }
                 liveClient.sendToolResponses(responses)

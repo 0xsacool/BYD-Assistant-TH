@@ -1,6 +1,9 @@
 package com.bydassistantng.ui.settings
 
 import android.widget.Toast
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +59,11 @@ internal fun AssistantPane(viewModel: SettingsViewModel) {
     val language by viewModel.language.collectAsState()
     val arabicDialect by viewModel.arabicDialect.collectAsState()
     val assistantVoice by viewModel.assistantVoice.collectAsState()
+    val weatherEnabled by viewModel.weatherEnabled.collectAsState()
+    val weatherLocation by viewModel.weatherLocation.collectAsState()
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        viewModel.setWeatherLocation(granted)
+    }
     val webSearchEnabled by viewModel.webSearchEnabled.collectAsState()
     val greetingEnabled by viewModel.greetingEnabled.collectAsState()
     val autoStartConfirmed = autoStartConfirmed(viewModel)
@@ -171,6 +179,17 @@ internal fun AssistantPane(viewModel: SettingsViewModel) {
             }
         }
         SettingsSection(stringResource(R.string.group_lookup)) {
+            row {
+                SwitchSetting(title = stringResource(R.string.weather_title), subtitle = stringResource(R.string.weather_desc),
+                    checked = weatherEnabled, onCheckedChange = { viewModel.setWeatherEnabled(it) })
+            }
+            if (weatherEnabled) row {
+                SwitchSetting(title = stringResource(R.string.weather_location_title), subtitle = stringResource(R.string.weather_location_desc),
+                    checked = weatherLocation, onCheckedChange = { enabled ->
+                        if (enabled) locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        else viewModel.setWeatherLocation(false)
+                    })
+            }
             row {
                 SwitchSetting(
                     title = stringResource(R.string.web_search_title),

@@ -298,6 +298,11 @@ class SettingsViewModel @Inject constructor(
     val webSearchEnabled: StateFlow<Boolean> = preferencesRepository.webSearchEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    val weatherEnabled = preferencesRepository.weatherEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val weatherLocation = preferencesRepository.weatherLocation.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    fun setWeatherEnabled(enabled: Boolean) { viewModelScope.launch { preferencesRepository.setWeatherEnabled(enabled) } }
+    fun setWeatherLocation(enabled: Boolean) { viewModelScope.launch { preferencesRepository.setWeatherLocation(enabled) } }
+
     fun setArabicDialect(dialect: ArabicDialect) {
         viewModelScope.launch { preferencesRepository.setArabicDialect(dialect) }
     }

@@ -59,6 +59,8 @@ class PreferencesRepository @Inject constructor(@ApplicationContext context: Con
         val ARABIC_DIALECT = stringPreferencesKey("arabic_dialect")
         val ASSISTANT_VOICE = stringPreferencesKey("assistant_voice")
         val WEB_SEARCH_ENABLED = booleanPreferencesKey("web_search_enabled")
+        val WEATHER_ENABLED = booleanPreferencesKey("weather_enabled")
+        val WEATHER_LOCATION = booleanPreferencesKey("weather_location")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val AUTO_START_VISITED_AT = longPreferencesKey("auto_start_visited_at")
         val UPDATE_CHANNEL = stringPreferencesKey("update_channel")
@@ -121,6 +123,11 @@ class PreferencesRepository @Inject constructor(@ApplicationContext context: Con
     suspend fun setWebSearchEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.WEB_SEARCH_ENABLED] = enabled }
     }
+
+    val weatherEnabled: Flow<Boolean> = dataStore.data.map { it[Keys.WEATHER_ENABLED] ?: false }
+    suspend fun setWeatherEnabled(enabled: Boolean) { dataStore.edit { it[Keys.WEATHER_ENABLED] = enabled } }
+    val weatherLocation: Flow<Boolean> = dataStore.data.map { it[Keys.WEATHER_LOCATION] ?: false }
+    suspend fun setWeatherLocation(enabled: Boolean) { dataStore.edit { it[Keys.WEATHER_LOCATION] = enabled } }
 
     /** Whether the assistant may operate the car's controls (windows, seats, climate...), not just talk about
      * them. On by default: it is what the assistant is for. Someone who switched it off keeps it off. */

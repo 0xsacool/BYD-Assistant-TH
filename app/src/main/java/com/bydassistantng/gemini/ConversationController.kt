@@ -92,7 +92,8 @@ class ConversationController @Inject constructor(
             // Vehicle commands are only ever declared when the user has explicitly armed vehicle
             // control, so Gemini structurally cannot call one otherwise (navigation is always offered).
             val vehicleControlEnabled = preferencesRepository.vehicleControlEnabled.first()
-            val tools = assistantTools(vehicleControlEnabled)
+            val weatherEnabled = preferencesRepository.weatherEnabled.first()
+            val tools = assistantTools(vehicleControlEnabled, weather = weatherEnabled)
 
             val encodeStartMs = SystemClock.elapsedRealtime()
             val audioBase64 = try {
@@ -111,7 +112,7 @@ class ConversationController @Inject constructor(
             } else {
                 listOf(SwitchedOff(SwitchableFeature.VEHICLE_CONTROL, SettingsPaths.of(context, SwitchableFeature.VEHICLE_CONTROL)))
             }
-            val systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = voiceAssistantSystemPrompt(language, switchedOff = switchedOff))))
+            val systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = voiceAssistantSystemPrompt(language, switchedOff = switchedOff, weather = weatherEnabled))))
             val history = mutableListOf(
                 GeminiContent(role = "user", parts = listOf(GeminiPart(inlineData = GeminiInlineData(mimeType, audioBase64)))),
             )
@@ -126,37 +127,37 @@ class ConversationController @Inject constructor(
             }
             AppLogger.log(TAG, "[turn $turnId] first call succeeded after ${SystemClock.elapsedRealtime() - firstCallStartMs}ms")
 
-            val functionCall = firstContent.parts.firstOrNull { it.functionCall != null }?.functionCall
-            if (functionCall == null) {
-                val text = firstContent.parts.firstOrNull { !it.text.isNullOrBlank() }?.text
-                AppLogger.log(TAG, "[turn $turnId] done (text reply, total ${SystemClock.elapsedRealtime() - turnStartMs}ms)")
-                onStatus(if (text != null) TurnStatus.Speaking(text, language) else TurnStatus.Failed(text(R.string.classic_empty_reply)))
-                return
-            }
-
-            AppLogger.log(TAG, "[turn $turnId] function call: ${functionCall.name}(${functionCall.args})")
-            val dispatchResponse = VehicleFunctionDispatcher.dispatch(
-                functionCall, vehicleControlEnabled, vehicleController, context,
-            ) { displayName -> onStatus(TurnStatus.DispatchingCommand(displayName)) }
-
-            history += GeminiContent(role = "model", parts = firstContent.parts)
-            history += GeminiContent(
-                role = "user",
-                parts = listOf(GeminiPart(functionResponse = GeminiFunctionResponse(functionCall.name, dispatchResponse))),
-            )
-
-            val secondCallStartMs = SystemClock.elapsedRealtime()
-            when (val followUp = geminiClient.generateContent(apiKey, MODEL, GeminiRequest(history, systemInstruction, tools))) {
-                is GeminiResult.Failure -> {
-                    AppLogger.log(TAG, "[turn $turnId] follow-up call failed after ${SystemClock.elapsedRealtime() - secondCallStartMs}ms: ${followUp.error}")
-                    onStatus(TurnStatus.Failed(describeError(followUp)))
+            var content = firstContent
+            // Permit dependent functions in subsequent replies, with a finite bound to avoid a
+            // model repeatedly invoking tools. The existing vehicle dispatcher remains the gate.
+            repeat(6) {
+                val calls = content.parts.mapNotNull { it.functionCall }
+                if (calls.isEmpty()) {
+                    val reply = content.parts.firstOrNull { !it.text.isNullOrBlank() }?.text
+                    onStatus(if (reply != null) TurnStatus.Speaking(reply, language) else TurnStatus.Failed(text(R.string.classic_empty_reply)))
+                    return
                 }
-                is GeminiResult.Success -> {
-                    AppLogger.log(TAG, "[turn $turnId] follow-up call succeeded after ${SystemClock.elapsedRealtime() - secondCallStartMs}ms, total ${SystemClock.elapsedRealtime() - turnStartMs}ms")
-                    val text = followUp.content.parts.firstOrNull { !it.text.isNullOrBlank() }?.text
-                    onStatus(if (text != null) TurnStatus.Speaking(text, language) else TurnStatus.Failed(text(R.string.classic_empty_reply)))
+                val responses = dispatchBatch(calls) { call ->
+                    VehicleFunctionDispatcher.dispatch(call, vehicleControlEnabled, vehicleController, context) { displayName ->
+                        onStatus(TurnStatus.DispatchingCommand(displayName))
+                    }
+                }
+                history += GeminiContent(role = "model", parts = content.parts)
+                history += GeminiContent(
+                    role = "user",
+                    parts = calls.zip(responses) { call, response ->
+                        GeminiPart(functionResponse = GeminiFunctionResponse(call.name, response))
+                    },
+                )
+                // On the final round remove tools, to request a summary rather than more actions.
+                val available = if (it == 5) null else tools
+                when (val result = geminiClient.generateContent(apiKey, MODEL, GeminiRequest(history, systemInstruction, available))) {
+                    is GeminiResult.Failure -> return onStatus(TurnStatus.Failed(describeError(result)))
+                    is GeminiResult.Success -> content = result.content
                 }
             }
+            val reply = content.parts.firstOrNull { !it.text.isNullOrBlank() }?.text
+            onStatus(if (reply != null && content.parts.none { it.functionCall != null }) TurnStatus.Speaking(reply, language) else TurnStatus.Failed(text(R.string.classic_empty_reply)))
         }
     }
 

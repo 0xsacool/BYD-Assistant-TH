@@ -2,6 +2,9 @@ package com.bydassistantng.gemini
 
 import android.content.Context
 import com.bydassistantng.R
+import com.bydassistantng.weather.WeatherTool
+import com.bydassistantng.data.PreferencesRepository
+import kotlinx.coroutines.flow.first
 import com.bydassistantng.apps.AppLauncherTool
 import com.bydassistantng.apps.CloseAppTool
 import com.bydassistantng.audio.PlaySoundOutsideTool
@@ -42,6 +45,21 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.coroutines.CancellationException
+
+/** Dispatch each call once, in order. A failed action must not hide later independent actions. */
+internal suspend fun dispatchBatch(
+    calls: List<GeminiFunctionCall>,
+    dispatch: suspend (GeminiFunctionCall) -> JsonObject,
+): List<JsonObject> = calls.map { call ->
+    try {
+        dispatch(call)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        buildJsonObject { put("error", "The action failed; its result could not be confirmed.") }
+    }
+}
 
 private const val TAG = "VehicleDispatch"
 
@@ -76,6 +94,7 @@ fun assistantTools(
     driveModes: Boolean = false,
     clusterScreen: Boolean = false,
     driveModeOptions: List<DriveMode> = DriveMode.entries,
+    weather: Boolean = false,
 ): List<GeminiTool> {
     val declarations = buildList {
         add(NavigationTool.declaration)
@@ -84,6 +103,7 @@ fun assistantTools(
         add(MediaControlTool.declaration)
         add(PlayMediaTool.declaration)
         add(VolumeTool.declaration)
+        if (weather) add(WeatherTool.declaration)
         if (conversation) add(endConversationDeclaration)
         // Only when the user has long-term memory switched on, in a conversation.
         if (conversation && memoryTools) {
@@ -133,6 +153,10 @@ object VehicleFunctionDispatcher {
         cluster: ClusterOptions = ClusterOptions.OFF,
         onDispatching: suspend (displayName: String) -> Unit,
     ): JsonObject {
+        if (functionCall.name == WeatherTool.FUNCTION_NAME) {
+            val preferences = PreferencesRepository(context.applicationContext)
+            return WeatherTool.handle(context, functionCall, preferences.weatherEnabled.first(), preferences.weatherLocation.first())
+        }
         if (functionCall.name == NavigationTool.FUNCTION_NAME) {
             return NavigationTool.handle(context, functionCall, onDispatching)
         }
@@ -311,6 +335,7 @@ fun voiceAssistantSystemPrompt(
     musicHint: Boolean = false,
     switchedOff: List<SwitchedOff> = emptyList(),
     notOnThisCar: List<SwitchableFeature> = emptyList(),
+    weather: Boolean = false,
 ): String {
     // A fixed language is a firm rule and is said twice (here and again at the very end): a model that listens in many
     // languages, and was told only once, tends to answer in whichever it heard, which an unclear word can make the wrong one.
@@ -384,6 +409,13 @@ fun voiceAssistantSystemPrompt(
         " For questions about current information — news, weather, sports results, prices, opening hours — " +
             "use Google Search, then answer in one or two spoken sentences without reading out links or sources."
     } else ""
+    val weatherInstruction = if (weather) {
+        " For outdoor weather, today’s temperature, rain or outdoor PM2.5, use online_weather before replying, " +
+            "even if Google Search is unavailable. Prefer online_weather to search for weather. Use only the explicitly named place; " +
+            "if no place was named omit the city, and if the tool needs a place, ask for one. Distinguish online outdoor estimates " +
+            "from temperature or air-quality readings inside the vehicle or from the car’s own sensors. Never invent missing values. " +
+            "Mention Open-Meteo and that PM2.5 is a model estimate when relevant."
+    } else ""
     // Memory, when the user has it on: what it knows, how to add to it, and what was just said.
     val memoryInstruction = buildString {
         if (memory.tools) {
@@ -410,9 +442,13 @@ fun voiceAssistantSystemPrompt(
         "open_app, and to close or quit an app, call close_app; for play, pause, next or previous on the music, " +
         "call media_control. When the user asks you to " +
         "control something in the car and a matching function is available, call that function instead " +
-        "of describing the action in words. If no matching function is available, say plainly that you cannot do " +
+        "of describing the action in words. For a request containing several actions, call the matching functions in the requested order, " +
+        "including every independently supported action. Report each actual tool result, including failures; " +
+        "never claim an action succeeded without its result. When media playback is requested along with other actions, " +
+        "finish the other requested actions first and start media last, then give a concise confirmation. " +
+        "If no matching function is available, say plainly that you cannot do " +
         "that rather than pretending to have done it, and do not say that the system or the car does not allow it." +
-        "$searchInstruction$memoryInstruction$musicInstruction$switchedOffInstruction" +
+        "$searchInstruction$weatherInstruction$memoryInstruction$musicInstruction$switchedOffInstruction" +
         (
             if (conversation) {
                 " This is an ongoing conversation: after you answer, the user may keep talking, so answer " +
