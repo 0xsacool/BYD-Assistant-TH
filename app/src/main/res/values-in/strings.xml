@@ -479,8 +479,8 @@
     <string name="log_hide_private_off">Seluruh log ditampilkan. Termasuk apa yang Anda ucapkan dan minta. Bagikan hanya kepada orang yang Anda percayai.</string>
     <string name="app_language_thai">ไทย</string>
     <string name="language_thai">Bahasa Thailand</string>
-    <string name="weather_title">Online weather</string>
-    <string name="weather_desc">Use Open-Meteo only when asked. The city or approximate coordinates are sent to Open-Meteo. PM2.5 is a model estimate.</string>
-    <string name="weather_location_title">Use approximate location for weather</string>
-    <string name="weather_location_desc">When no city is named, use a recent approximate location only with permission. No background queries.</string>
+    <string name="weather_title">Cuaca daring</string>
+    <string name="weather_desc">Gunakan Open-Meteo hanya saat diminta. Nama kota atau koordinat perkiraan dikirim ke Open-Meteo. PM2.5 adalah estimasi model.</string>
+    <string name="weather_location_title">Gunakan lokasi perkiraan untuk cuaca</string>
+    <string name="weather_location_desc">Jika kota tidak disebutkan, gunakan lokasi perkiraan terbaru hanya dengan izin. Tidak ada pencarian di latar belakang.</string>
 </resources>

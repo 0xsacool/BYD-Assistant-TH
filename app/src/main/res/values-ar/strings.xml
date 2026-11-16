@@ -475,8 +475,8 @@
     <string name="log_hide_private_off">يُعرض السجل كاملًا، وهو يتضمن ما قلته وما طلبته. شاركه فقط مع من تثق بهم.</string>
     <string name="app_language_thai">ไทย</string>
     <string name="language_thai">التايلاندية</string>
-    <string name="weather_title">Online weather</string>
-    <string name="weather_desc">Use Open-Meteo only when asked. The city or approximate coordinates are sent to Open-Meteo. PM2.5 is a model estimate.</string>
-    <string name="weather_location_title">Use approximate location for weather</string>
-    <string name="weather_location_desc">When no city is named, use a recent approximate location only with permission. No background queries.</string>
+    <string name="weather_title">الطقس عبر الإنترنت</string>
+    <string name="weather_desc">استخدم Open-Meteo عند الطلب فقط. يتم إرسال اسم المدينة أو الإحداثيات التقريبية إلى Open-Meteo. قيمة PM2.5 تقديرية من النموذج.</string>
+    <string name="weather_location_title">استخدام الموقع التقريبي للطقس</string>
+    <string name="weather_location_desc">عند عدم تحديد مدينة، استخدم موقعًا تقريبيًا حديثًا بعد منح الإذن فقط. لا توجد استعلامات في الخلفية.</string>
 </resources>
